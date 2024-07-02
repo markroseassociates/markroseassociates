@@ -1,1 +1,1 @@
-Hi! This is the is the MRA Media repository for all your excel spreadsheet needs. All we ask that when making changes commit them to new branches so we know where we are and what has happened beforehand
+Hi! This is the is the MRA Media repository for all your google spreadsheet needs
