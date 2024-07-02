@@ -1,0 +1,63 @@
+=LET(
+section_1a, "INPUT: List the names of the researchers, ensuring that each name is in double quotes and the entries are separated by commas. ' Leads' will be added to each researcher's name to reference the individual lead pages",
+researcher_list, {"Amber", "Joe", "Edward", "Phil", "Lane", "Srishti", "Tom", "Killian"},
+
+section_1b, "INPUT: Specify the columns with the abbreviated versions of state names and the full names (from the Key Terms sheet)",
+states_full, 'Key Terms'!F4:F55,
+states_abb, 'Key Terms'!G4:G55,
+
+section_1c, "INPUT: Specify the column with the Do Not Contact list (from the Key Terms sheet)",
+dnc_col, 'Key Terms'!I4:I,
+
+section_1d, "INPUT: List the column names of extra columns such as population or A/B testing columns",
+extra_cols, {"Population", "Tailored Hook", "Attended Conference", "Distance from Urban Centre", "Distance from Conference"},
+
+
+
+section_2, "Researcher Pages: This adds ' Leads' to each name on the researcher list to check if the page is in the document. Pages in the document are automatically imported here",
+r_list, MAP(researcher_list, LAMBDA(x, IF(ISERROR(INDIRECT(x&" Leads!A1")) = TRUE, "", x&" Leads!"))),
+researcher_pages, FILTER(r_list, r_list <> ""),
+
+section_3, "Column names of the primary columns for analysis",
+main_cols, {"Country", "State", "Type", "Position of Lead", "Contact Name", "Email", "Researcher", "Call", "Tracker Theme", "Focus", "Focus Summary", "Link", "Source", "KWS", "Relevance", "Contacted?", "Area", "Notes"},
+sent_result, {"Sent", "Result", "Pitch Rating"},
+parent_org, MAP(researcher_pages, LAMBDA(x, CHOOSECOLS(INDIRECT(x & "R1C1:R1C50", 0), 4))),
+sub_org, MAP(researcher_pages, LAMBDA(x, CHOOSECOLS(INDIRECT(x & "R1C1:R1C50", 0), 5))),
+
+section_4, "Import columns",
+main_cols_list, MAP(main_cols, LAMBDA(x, TOCOL(MAP(researcher_pages, LAMBDA(r_page, IFERROR(CHOOSECOLS(INDIRECT(r_page&"R2C1:R1500C50", 0), MATCH(x, INDIRECT(r_page&"R1C1:R1C50", 0), 0)), ""))),,1))),
+sent_result_list, MAP(sent_result, LAMBDA(x, TOCOL(MAP(researcher_pages, LAMBDA(r_page, IFERROR(CHOOSECOLS(INDIRECT(r_page&"R2C1:R1500C50", 0), MATCH(x, INDIRECT(r_page&"R1C1:R1C50", 0), 0)), ""))),,1))),
+extra_cols_list, MAP(extra_cols, LAMBDA(x, TOCOL(MAP(researcher_pages, LAMBDA(r_page, IFERROR(CHOOSECOLS(INDIRECT(r_page&"R2C1:R1500C50", 0), MATCH(x, INDIRECT(r_page&"R1C1:R1C50", 0), 0)), ""))),,1))),
+extras_list, {extra_cols_list; MAKEARRAY(ROWS(main_cols_list)-ROWS(extra_cols_list), COLUMNS(extra_cols_list), LAMBDA(x, y, ""))},
+parent_org_list, TOCOL(MAP(researcher_pages, parent_org, LAMBDA(x, y, IFERROR(CHOOSECOLS(INDIRECT(x&"R2C1:R1500C50", 0), MATCH(y, INDIRECT(x&"R1C1:R1C50", 0), 0)), "Error: Ensure the list of 'main' organisations is column D (column 4)"))),,1),
+sub_org_list, TOCOL(MAP(researcher_pages, sub_org, LAMBDA(x, y, IFERROR(CHOOSECOLS(INDIRECT(x&"R2C1:R1500C50", 0), MATCH(y, INDIRECT(x&"R1C1:R1C50", 0), 0)), "Error: Ensure the list of 'sub' organisations is column E (column 5)"))),,1),
+
+section_5, "Do Not Contact List: Appends [DO NOT CONTACT] to the parent organisation if it is listed in the Do Not Contact column in the Key Terms sheet",
+dont_contact_org_list, FILTER(dnc_col, dnc_col <> ""),
+dont_contact, MAP(parent_org_list, LAMBDA(x, IFERROR(IF(MAX(TRANSPOSE(IFERROR(ARRAYFORMULA(FIND(dont_contact_org_list, x)), 0))) > 0, x & " [DO NOT CONTACT]", x), x))),
+
+section_6, "Combine imported columns into raw range and filter it, removing all blank rows (rows where the country is blank are filtered out)",
+pre_range, {CHOOSECOLS(main_cols_list, 1, 2), dont_contact, sub_org_list, CHOOSECOLS(main_cols_list, SEQUENCE(1, COLUMNS(main_cols_list)-3, 3)), sent_result_list, CHOOSECOLS(main_cols_list, -1)},
+raw_range, IFERROR(({pre_range, extra_cols_list}), ({pre_range, extras_list})),
+filtered_range, FILTER(raw_range, CHOOSECOLS(raw_range, 1) <> "", (CHOOSECOLS(raw_range, 3) <> "") + (CHOOSECOLS(raw_range, 4) <> "")),
+
+section_7, "specify the columnns with the abbreviated versions of state names and the full names (from the Key Terms page), then use a mapping function to map all the abbreviations from the lead sheets to their full versions",
+countries_and_states, MAP(CHOOSECOLS(filtered_range, 1), CHOOSECOLS(filtered_range, 2), LAMBDA(country, state, IF(country = "USA", CHOOSEROWS(states_full, MATCH(state, states_abb, 0)), country))),
+range, {countries_and_states, CHOOSECOLS(filtered_range, SEQUENCE(1, COLUMNS(filtered_range)-2, 3))},
+
+section_8, "split USA leads and international leads",
+USA, FILTER(range, CHOOSECOLS(filtered_range, 1) = "USA"),
+INT, FILTER(range, CHOOSECOLS(filtered_range, 1) <> "USA"),
+
+section_9, "this creates a blank sequence that separates USA from International",
+sepr, MAP(SEQUENCE(5, COLUMNS(INT)), LAMBDA(x, IF(x<>"", ""))),
+
+section_10, "this creates the dark lines between states and countries by adding an ellipsis to each state/county name (which is recognised and coloured black by conditional formatting rules) and adding a row of blank cells which have the same number of columns as USA or INT",
+USA_spaces, MAP(UNIQUE(CHOOSECOLS(USA, 1)), LAMBDA(x, {x&"...", MAKEARRAY(1, COLUMNS(USA)-1, LAMBDA(a, b, ""))})),
+INT_spaces, MAP(UNIQUE(CHOOSECOLS(INT, 1)), LAMBDA(x, {x&"...", MAKEARRAY(1, COLUMNS(INT)-1, LAMBDA(a, b, ""))})),
+USA_s, SORT({USA; USA_spaces}, 1, 1, 2, 1),
+INT_s, SORT({INT; INT_spaces}, 1, 1, 2, 1),
+
+leads, IFERROR(({INT_s; sepr; USA_s}), USA_s),
+
+leads)
